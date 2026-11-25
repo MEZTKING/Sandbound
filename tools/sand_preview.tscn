@@ -1,0 +1,25 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://tools/sand_preview.gd" id="1_preview"]
+
+[sub_resource type="Environment" id="Environment_sand"]
+background_mode = 1
+background_color = Color(0.55, 0.7, 0.9, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.6, 0.65, 0.8, 1)
+ambient_light_energy = 0.5
+
+[node name="SandPreview" type="Node3D"]
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.819152, -0.439385, 0.368688, 0, 0.642788, 0.766044, -0.573576, -0.627507, 0.526541, 0, 4, 0)
+shadow_enabled = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_sand")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.851658, 0.524097, 0, -0.524097, 0.851658, 0, 1.6, 2.6)
+
+[node name="Sand" type="MeshInstance3D" parent="."]
+script = ExtResource("1_preview")

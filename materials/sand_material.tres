@@ -1,0 +1,32 @@
+[gd_resource type="ShaderMaterial" load_steps=9 format=3]
+
+[ext_resource type="Shader" path="res://shaders/sand.gdshader" id="1_shader"]
+[ext_resource type="Texture2D" path="res://textures/sand/sand_color.png" id="2_sand_color"]
+[ext_resource type="Texture2D" path="res://textures/sand/sand_height.png" id="3_sand_height"]
+[ext_resource type="Texture2D" path="res://textures/sand/packed_color.png" id="4_packed_color"]
+[ext_resource type="Texture2D" path="res://textures/sand/packed_height.png" id="5_packed_height"]
+[ext_resource type="Texture2D" path="res://textures/sand/variation.png" id="6_variation"]
+[ext_resource type="Texture2D" path="res://textures/sand/hardpan_color.png" id="7_hardpan_color"]
+[ext_resource type="Texture2D" path="res://textures/sand/hardpan_height.png" id="8_hardpan_height"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_shader")
+shader_parameter/sand_color = ExtResource("2_sand_color")
+shader_parameter/sand_height = ExtResource("3_sand_height")
+shader_parameter/packed_color = ExtResource("4_packed_color")
+shader_parameter/packed_height = ExtResource("5_packed_height")
+shader_parameter/variation = ExtResource("6_variation")
+shader_parameter/hardpan_color = ExtResource("7_hardpan_color")
+shader_parameter/hardpan_height = ExtResource("8_hardpan_height")
+shader_parameter/tile_size_m = 1.5
+shader_parameter/variation_size_m = 23.0
+shader_parameter/variation_strength = 0.35
+shader_parameter/ripple_height_cm = 1.2
+shader_parameter/packed_height_cm = 0.4
+shader_parameter/ripples_on_ridges = 0.3
+shader_parameter/tint = Color(1, 1, 1, 1)
+shader_parameter/rut_edge_softness = 0.3
+shader_parameter/ridge_brighten = 0.08
+shader_parameter/sand_roughness = 0.95
+shader_parameter/packed_roughness = 0.8

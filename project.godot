@@ -1,0 +1,49 @@
+; Godot project file. Open this folder in Godot 4.7+ (Project Manager -> Import).
+config_version=5
+
+[application]
+config/name="Sand Rover"
+config/description="A tiny courier in a very big desert."
+config/version="1.0.0"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+config/icon="res://icon.png"
+config/windows_native_icon="res://icon.ico"
+; Saves go to a folder of our own: %APPDATA%/SandRover on Windows,
+; ~/.local/share/SandRover on Linux (this is the path for Steam Cloud).
+config/use_custom_user_dir=true
+config/custom_user_dir_name="SandRover"
+boot_splash/image="res://splash.png"
+boot_splash/bg_color=Color(0.05, 0.04, 0.03, 1)
+boot_splash/stretch_mode=1
+boot_splash/show_image=true
+
+[autoload]
+; Created before anything else; every script can use them by name.
+Settings="*res://scripts/settings.gd"
+GameInput="*res://scripts/game_input.gd"
+SteamService="*res://scripts/steam_service.gd"
+Achievements="*res://scripts/achievements.gd"
+
+[display]
+window/size/viewport_width=1280
+window/size/viewport_height=720
+; Menus and text are laid out for 1280 x 720 and scale up or down to fit
+; any screen ("expand" keeps the layout working at 16:10, e.g. Steam Deck).
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[physics]
+; 60 physics steps per second (Godot's default).
+common/physics_ticks_per_second=60
+; If a frame is slow, Godot runs extra physics steps to catch up. Too many
+; catch-up steps make the next frame slow too, and FPS spirals down and never
+; recovers ("spiral of death"). Capping it at 4 means a slow frame turns into
+; brief slow motion instead.
+common/max_physics_steps_per_frame=4
+; Smooths movement between physics steps so 60 steps/s looks like your
+; screen's full refresh rate.
+common/physics_interpolation=true
+; Godot's own physics engine. (Jolt is faster for most things, but it rebuilds
+; the whole sand collision shape on every change, which is 5x slower for us.)
+3d/physics_engine="GodotPhysics3D"

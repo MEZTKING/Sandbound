@@ -1,0 +1,11 @@
+# Godot's import cache (rebuilt automatically when you open the project)
+.godot/
+# Exported game builds
+build/
+# Half-written save files
+*.tmp
+# Steam test file: never commit or ship it
+steam_appid.txt
+# Export passwords and signing keys
+export_credentials.cfg
+.DS_Store
