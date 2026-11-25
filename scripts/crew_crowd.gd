@@ -76,3 +76,46 @@ func setup(terrain: SandTerrain, center: Vector3, keep_clear: float) -> void:
 		mm.set_instance_transform(n, Transform3D(basis, Vector3(x, y, z)))
 	multimesh = mm
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+# ---------------------------------------------------------------------------
+# Borrowing crew for jobs (carrying parts to the truck)
+# ---------------------------------------------------------------------------
+# A crowd member who goes off to work is hidden in the MultiMesh and drawn as
+# a separate little figure while they're busy; when they're done they hop
+# back into the crowd.
+
+var _busy := {}            # instance index -> its normal transform
+
+
+## The n nearest idle crew to a point: [[index, world position, colour], ...]
+func borrow(near: Vector3, n: int) -> Array:
+	var free: Array = []
+	for i in multimesh.instance_count:
+		if not _busy.has(i):
+			free.append([i, multimesh.get_instance_transform(i).origin.distance_squared_to(near)])
+	free.sort_custom(func(a, b): return a[1] < b[1])
+	var out := []
+	for k in mini(n, free.size()):
+		var i: int = free[k][0]
+		var xf := multimesh.get_instance_transform(i)
+		_busy[i] = xf
+		multimesh.set_instance_transform(i, Transform3D(Basis().scaled(Vector3.ZERO), xf.origin))
+		out.append([i, xf.origin, overall_color(i)])
+	return out
+
+
+func give_back(i: int) -> void:
+	if _busy.has(i):
+		multimesh.set_instance_transform(i, _busy[i])
+		_busy.erase(i)
+
+
+## The overall colour the shader gives crowd member i (the same sums as
+## shaders/figure.gdshader), so a borrowed member keeps their colour.
+static func overall_color(i: int) -> Color:
+	var h := fposmod(sin(i * 78.233) * 43758.5453, 1.0)
+	var c := Color(0.30, 0.45, 0.62) if h < 0.55 else Color(0.80, 0.62, 0.30)
+	if h >= 0.85:
+		c = Color(0.78, 0.76, 0.70)
+	return c

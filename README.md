@@ -450,6 +450,24 @@ godot --headless --path . -- --scorpiontest
 godot --headless --path . -- --outposttest
 ```
 
+Tutorial and customisation:
+
+```bash
+godot --headless --path . -- --tutorialtest
+```
+
+```bash
+godot --headless --path . -- --customtest
+```
+
+`--tutorialtest` drives through Pip's steps in order (throttle, steer and
+brake, hardpan, soft sand, the ridge, delivery), checks the ridge is there,
+hold-to-skip, and that one-off tips appear once. `--customtest`: paint
+reaches the truck's own material and not the shared one, every decal
+appears, tuning changes the real physics (the gearing numbers above), the
+crew show the old part while fitting and the new one after ~3 s, then go
+back to the crowd, and "finish now" works.
+
 Release (controller, menus, settings, achievements):
 
 ```bash
@@ -836,6 +854,50 @@ readable at small sizes. Text outlines are a warm dark brown, not black.
 **Beauty shots:** open `tools/beauty_shots.tscn` and press F6. Six fixed
 cameras (base, truck, Salt Flats, Glass Desert, the Drift, the hull) save
 PNGs to `user://beauty_shots`. Take a set before and after any art change.
+
+## Old Pip's first-day tutorial
+
+Your first contract, "First Day", comes with Old Pip talking you through it
+in a panel at the bottom of the screen. Each tip waits until you've actually
+done it: squeeze the throttle gently, steer and brake, find the firm pale
+hardpan (an arrow points to some), cross soft sand without spinning your
+wheels, and get over a low ridge of sand without losing his toolbox. If the
+crate falls off, he stops everything to show you how to load it back.
+Nothing ever blocks driving; ignore him and he'll remind you after 20 s.
+
+- Hold **Tab** (or **View** on a pad) for a second to skip; Options >
+  "Tutorial tips" turns him off; Pause > **Replay First Day** repeats it
+  (no pay the second time).
+- Later, he pops up once the first time a beetle rears up near you, ants
+  march on your cargo, or cargo falls off.
+- What he says and when: `scripts/tutorial.gd` (`STEPS`, `_check()`).
+
+## Your truck: paint, tuning, and the crew
+
+- **Paint** (garage > Paint, free): 10 body colours, a trim colour, and a
+  decal: centre stripe, twin stripes, side flash, race number (0-99),
+  flames or a beetle. Changes show on the truck at once.
+  (`scripts/paint_job.gd`: the truck gets its own copy of the model
+  material, which swaps the two "truck paint" squares of the palette.)
+- **Tuning** (garage > Tuning, unlocks after story contract 3 as "Pip's
+  Toolkit"): four sliders, each with a real downside (`scripts/tuning.gd`):
+
+  | Slider | Turn it up | The catch |
+  |---|---|---|
+  | Suspension stiffness | flat and steady on hardpan | bounces over bumps, throws cargo |
+  | Ride height | clears ridges and holes | higher centre of mass: tips in corners |
+  | Tyre pressure | grippier, faster on hardpan | sinks deeper in soft sand (low pressure floats but grips less) |
+  | Gearing | pulls out of holes and up dunes | lower top speed, digs in more easily |
+
+  Measured by `--customtest` (flat ground, full throttle): gearing 0.75 /
+  1.0 / 1.35 gives a top speed of 7.1 / 6.5 / 5.2 m/s and 1.9 / 2.7 / 3.5 m
+  covered in the first 1.5 s.
+- **The crew fit what you buy:** 2 of them (4 for heavy parts) step out of
+  the crowd, fetch it from the parts pile, carry it over and bolt it on
+  with three ratchet clicks and sparks; after 3 seconds it pops into place
+  and they wander back. Buy several and they queue up. Close the menu or
+  drive off and they finish at once. In the workshop, one of them nips in
+  for a quick ratchet on each part you bolt on.
 
 ## Controllers, menus and options
 

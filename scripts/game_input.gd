@@ -46,6 +46,7 @@ const ACTIONS := {
 	"toggle_vsync": {"keys": [KEY_V]},
 	"debug_hud": {"keys": [KEY_F3]},
 	"screenshot": {"keys": [KEY_F12]},
+	"skip_tips": {"keys": [KEY_TAB], "buttons": [JOY_BUTTON_BACK]},   # hold 1 s
 	# --- Workshop
 	"ws_up": {"keys": [], "buttons": [JOY_BUTTON_DPAD_UP], "axes": [[JOY_AXIS_LEFT_Y, -1.0]]},
 	"ws_down": {"keys": [], "buttons": [JOY_BUTTON_DPAD_DOWN], "axes": [[JOY_AXIS_LEFT_Y, 1.0]]},

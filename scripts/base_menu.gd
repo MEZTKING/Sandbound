@@ -11,6 +11,11 @@ signal part_clicked(slot: String, id: String)
 signal workshop_pressed
 signal wait_pressed(until: float)
 signal travel_pressed(station_id: String)
+signal paint_changed(paint: Dictionary)
+signal tuning_changed(id: String, value: float)
+
+var _garage_tab := "parts"      # parts / paint / tuning
+var _state := {}
 
 var _contract_box: VBoxContainer
 var _garage_box: VBoxContainer
@@ -145,44 +150,43 @@ func refresh(state: Dictionary) -> void:
 			tr.add_child(tb)
 		_contract_box.add_child(tr)
 
-	# --- Garage: one row per slot, one button per part.
+	# --- Garage: three tabs.
+	_state = state
 	var head := HBoxContainer.new()
 	var g := _label("GARAGE", 20)
 	g.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(g)
 	var ws := Button.new()
-	ws.text = "Workshop: build onto your truck  [N]"
+	ws.text = "Workshop: build onto your truck"
 	ws.add_theme_font_size_override("font_size", 15)
 	ws.pressed.connect(workshop_pressed.emit)
+	UIKit.style_focus(ws)
 	head.add_child(ws)
 	_garage_box.add_child(head)
-	var fitted: Dictionary = state["fitted"]
-	var owned: Dictionary = state["owned"]
-	for slot in Parts.SLOTS:
-		_garage_box.add_child(_label(Parts.SLOT_NAMES[slot], 15))
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
-		_garage_box.add_child(row)
-		for id in Parts.CATALOGUE[slot]:
-			var part := Parts.get_part(slot, id)
-			var b := Button.new()
-			var status: String
-			if fitted[slot] == id:
-				status = "FITTED"
-				b.disabled = true
-			elif id in owned[slot]:
-				status = "owned: fit"
-			else:
-				status = "$%d" % part["price"]
-				b.disabled = part["price"] > state["money"]
-			b.text = "%s\n%s" % [part["name"], status]
-			b.custom_minimum_size = Vector2(160, 52)
-			b.add_theme_font_size_override("font_size", 14)
-			b.pressed.connect(part_clicked.emit.bind(slot, id))
-			b.mouse_entered.connect(func(): _info_label.text = "%s: %s" % [part["name"], part["desc"]])
-			b.focus_entered.connect(func(): _info_label.text = "%s: %s" % [part["name"], part["desc"]])
-			UIKit.style_focus(b)
-			row.add_child(b)
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 6)
+	_garage_box.add_child(tabs)
+	for t in [["parts", "Parts"], ["paint", "Paint"], ["tuning", "Tuning"]]:
+		var tb := Button.new()
+		tb.text = t[1]
+		tb.toggle_mode = true
+		tb.button_pressed = _garage_tab == t[0]
+		tb.add_theme_font_size_override("font_size", 15)
+		tb.custom_minimum_size = Vector2(110, 34)
+		UIKit.style_focus(tb)
+		var tab_id: String = t[0]
+		tb.pressed.connect(func():
+			_garage_tab = tab_id
+			refresh(_state)
+			_focus_garage.call_deferred())
+		tabs.add_child(tb)
+	match _garage_tab:
+		"parts":
+			_build_parts_tab(state)
+		"paint":
+			_build_paint_tab(state)
+		"tuning":
+			_build_tuning_tab(state)
 	# Put the controller's focus on the first contract (or the garage).
 	_focus_after_refresh.call_deferred()
 
@@ -220,3 +224,172 @@ func _focus_after_refresh() -> void:
 	var focused := get_viewport().gui_get_focus_owner()
 	if focused == null or not is_ancestor_of(focused):
 		UIKit.focus_first(_contract_box)
+
+
+func _focus_garage() -> void:
+	UIKit.focus_first(_garage_box)
+
+
+# --- Parts: one row per slot, one button per part.
+func _build_parts_tab(state: Dictionary) -> void:
+	var fitted: Dictionary = state["fitted"]
+	var owned: Dictionary = state["owned"]
+	for slot in Parts.SLOTS:
+		_garage_box.add_child(_label(Parts.SLOT_NAMES[slot], 15))
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		_garage_box.add_child(row)
+		for id in Parts.CATALOGUE[slot]:
+			var part := Parts.get_part(slot, id)
+			var b := Button.new()
+			var status: String
+			if fitted[slot] == id:
+				status = "FITTED"
+				b.disabled = true
+			elif id in owned[slot]:
+				status = "owned: fit"
+			else:
+				status = "$%d" % part["price"]
+				b.disabled = part["price"] > state["money"]
+			b.text = "%s\n%s" % [part["name"], status]
+			b.custom_minimum_size = Vector2(160, 52)
+			b.add_theme_font_size_override("font_size", 14)
+			b.pressed.connect(part_clicked.emit.bind(slot, id))
+			b.mouse_entered.connect(func(): _info_label.text = "%s: %s" % [part["name"], part["desc"]])
+			b.focus_entered.connect(func(): _info_label.text = "%s: %s" % [part["name"], part["desc"]])
+			UIKit.style_focus(b)
+			row.add_child(b)
+
+
+# --- Paint: body colour, trim colour, decal (and its number). Free.
+func _build_paint_tab(state: Dictionary) -> void:
+	var paint: Dictionary = state["paint"].duplicate()
+	for which in [["body", "Body colour"], ["trim", "Trim and decal colour"]]:
+		_garage_box.add_child(_label(which[1], 15))
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 4)
+		_garage_box.add_child(row)
+		for k in PaintJob.COLORS.size():
+			var sw := Button.new()
+			sw.toggle_mode = true
+			sw.button_pressed = int(paint[which[0]]) == k
+			sw.custom_minimum_size = Vector2(44, 40)
+			sw.tooltip_text = PaintJob.COLORS[k][0]
+			var style := StyleBoxFlat.new()
+			style.bg_color = PaintJob.COLORS[k][1]
+			style.set_corner_radius_all(6)
+			style.set_border_width_all(3 if sw.button_pressed else 0)
+			style.border_color = Color.WHITE
+			for st in ["normal", "hover", "pressed", "hover_pressed"]:
+				sw.add_theme_stylebox_override(st, style)
+			UIKit.style_focus(sw)
+			var key: String = which[0]
+			var name: String = PaintJob.COLORS[k][0]
+			sw.focus_entered.connect(func(): _info_label.text = name)
+			sw.mouse_entered.connect(func(): _info_label.text = name)
+			sw.pressed.connect(func():
+				paint[key] = k
+				_set_paint(paint))
+			row.add_child(sw)
+	_garage_box.add_child(_label("Decal", 15))
+	var drow := HFlowContainer.new()
+	drow.add_theme_constant_override("h_separation", 4)
+	_garage_box.add_child(drow)
+	for id in PaintJob.DECALS:
+		var b := Button.new()
+		b.text = PaintJob.DECALS[id]
+		b.toggle_mode = true
+		b.button_pressed = paint["decal"] == id
+		b.add_theme_font_size_override("font_size", 14)
+		UIKit.style_focus(b)
+		b.pressed.connect(func():
+			paint["decal"] = id
+			_set_paint(paint))
+		drow.add_child(b)
+	if paint["decal"] == "race_number":
+		var nrow := HBoxContainer.new()
+		nrow.add_child(_label("Number:  ", 15))
+		for step in [-10, -1]:
+			nrow.add_child(_num_button(paint, step))
+		var n := _label(str(int(paint["number"])), 20)
+		n.custom_minimum_size.x = 44
+		n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		nrow.add_child(n)
+		for step in [1, 10]:
+			nrow.add_child(_num_button(paint, step))
+		_garage_box.add_child(nrow)
+	_info_label.text = "Paint is free: try anything."
+
+
+func _num_button(paint: Dictionary, step: int) -> Button:
+	var b := Button.new()
+	b.text = ("%+d" % step)
+	b.add_theme_font_size_override("font_size", 14)
+	b.custom_minimum_size = Vector2(44, 32)
+	UIKit.style_focus(b)
+	b.pressed.connect(func():
+		paint["number"] = posmod(int(paint["number"]) + step, 100)
+		_set_paint(paint))
+	return b
+
+
+func _set_paint(paint: Dictionary) -> void:
+	var focused := get_viewport().gui_get_focus_owner()
+	var path := _garage_box.get_path_to(focused) if focused and _garage_box.is_ancestor_of(focused) else NodePath()
+	paint_changed.emit(paint.duplicate())
+	_state["paint"] = paint.duplicate()
+	refresh(_state)
+	# Keep the controller's focus where it was.
+	if not path.is_empty():
+		_restore_focus.call_deferred(path)
+
+
+func _restore_focus(path: NodePath) -> void:
+	var n := _garage_box.get_node_or_null(path)
+	if n is Control:
+		(n as Control).grab_focus()
+
+
+# --- Tuning: four sliders with real trade-offs (unlocked after contract 3).
+func _build_tuning_tab(state: Dictionary) -> void:
+	if not state.get("tuning_unlocked", false):
+		var l := _label("Pip's Toolkit unlocks after story contract 3.\nUntil then, the truck stays as the factory made it.", 16)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD
+		_garage_box.add_child(l)
+		return
+	var tuning: Dictionary = state["tuning"]
+	for id in Tuning.SLIDERS:
+		var def: Array = Tuning.SLIDERS[id]
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		var name := _label(def[0], 15)
+		name.custom_minimum_size.x = 180
+		row.add_child(name)
+		var sl := HSlider.new()
+		sl.min_value = def[1]
+		sl.max_value = def[3]
+		sl.step = def[4]
+		sl.value = Tuning.value(tuning, id)
+		sl.custom_minimum_size = Vector2(240, 30)
+		UIKit.style_focus(sl)
+		var shown := _label("", 15)
+		shown.custom_minimum_size.x = 64
+		var show := func(): shown.text = ("%.2f" % sl.value) if def[4] < 1.0 else str(int(sl.value))
+		show.call()
+		var desc: String = def[5]
+		sl.focus_entered.connect(func(): _info_label.text = desc)
+		sl.mouse_entered.connect(func(): _info_label.text = desc)
+		var slider_id: String = id
+		sl.value_changed.connect(func(v):
+			show.call()
+			tuning_changed.emit(slider_id, v))
+		row.add_child(sl)
+		row.add_child(shown)
+		var reset := Button.new()
+		reset.text = "Reset"
+		reset.add_theme_font_size_override("font_size", 13)
+		UIKit.style_focus(reset)
+		reset.pressed.connect(func(): sl.value = def[2])
+		row.add_child(reset)
+		_garage_box.add_child(row)
+	_info_label.text = "Every setting has a downside: tune for the job."

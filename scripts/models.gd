@@ -52,6 +52,7 @@ static func palette_material() -> ShaderMaterial:
 		_palette_mat.set_shader_parameter("palette", PALETTE)
 		_palette_mat.set_shader_parameter("material_palette", MATERIAL_PALETTE)
 		_palette_mat.set_shader_parameter("grime", GRIME)
+		_palette_mat.set_shader_parameter("palette_rows", float(PALETTE.get_height()) / (PALETTE.get_width() / 8.0))
 	return _palette_mat
 
 

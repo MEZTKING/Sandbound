@@ -163,6 +163,16 @@ var _air_time := 0.0            # seconds with no wheel on the ground
 var _was_dropped := false
 var _last_vy := 0.0
 var _glass_rescue_used := false # for the "Self-Sufficient" achievement
+var paint: Dictionary = PaintJob.default_paint()   # the Paint tab
+var tuning: Dictionary = Tuning.defaults()         # the Tuning tab
+var tips_seen: Array = []       # one-off tips from Old Pip already shown
+var crowds := {}                # station id -> its CrewCrowd
+var tutorial: Tutorial
+var _map_hold := 0.0
+var crew_fitter: CrewFitting
+var _pending_fits := {}         # slot -> the part still SHOWN while the crew fit the new one
+var _fit_jobs := {}             # crew job id -> slot
+var tutorial_done := false
 var help_screen: CanvasLayer
 var base_light: OmniLight3D
 var _contract_time := 0.0      # seconds since the current contract started
@@ -212,7 +222,8 @@ func _ready() -> void:
 	_buildtest = "--buildtest" in OS.get_cmdline_user_args()
 	for t in ["hawktest", "windtest", "daytest", "storytest", "worldtest", "crusttest", "scorpiontest", "outposttest",
 			"glasstest", "magnettest", "shardtest", "traveltest",
-			"gravitytest", "flowtest", "raytest", "drifttest", "controllertest"]:
+			"gravitytest", "flowtest", "raytest", "drifttest", "controllertest",
+			"customtest", "tutorialtest"]:
 		if ("--" + t) in OS.get_cmdline_user_args():
 			_m4test = t
 	_rng.seed = 2026
@@ -244,12 +255,19 @@ func _ready() -> void:
 	var crowd := CrewCrowd.new()
 	add_child(crowd)
 	crowd.setup(terrain, _on_ground(BASE_POS), BASE_RADIUS + 0.5)
+	crowds["home"] = crowd
 	_build_base_pad(BASE_POS)
+	crew_fitter = CrewFitting.new()
+	crew_fitter.main = self
+	add_child(crew_fitter)
+	crew_fitter.fitted.connect(_on_crew_fitted)
 
 	car = RCCar.new()
 	car.terrain = terrain
 	car.parts = fitted.duplicate()
 	car.build = build.duplicate()
+	car.paint = paint.duplicate()
+	car.tuning = tuning.duplicate()
 	add_child(car)
 	car.place_at(_on_ground(BASE_POS) + Vector3(0, 0.8, 0), PI)  # face -Z, toward the dunes
 
@@ -340,6 +358,11 @@ func _ready() -> void:
 	menu.part_clicked.connect(_on_part_clicked)
 	menu.workshop_pressed.connect(_open_workshop)
 	menu.travel_pressed.connect(_fast_travel)
+	menu.paint_changed.connect(func(p: Dictionary):
+		paint = p
+		car.set_paint(paint)      # free, instant: no crew needed for a respray
+		_save_game())
+	menu.tuning_changed.connect(_on_tuning_changed)
 	menu.wait_pressed.connect(func(until: float):
 		day_night.skip_to(until)
 		offers = _make_offers()
@@ -382,6 +405,10 @@ func _ready() -> void:
 		_show_message("Welcome to base! Pick your first contract.")
 	pause_menu = PauseMenu.new()
 	add_child(pause_menu)
+	pause_menu.replay_tutorial.connect(replay_first_day)
+	tutorial = Tutorial.new()
+	tutorial.main = self
+	add_child(tutorial)
 	pause_menu.return_to_title.connect(func():
 		_save_game()
 		get_tree().paused = false
@@ -408,8 +435,18 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("help") and not _is_test() and not workshop.active:
 		help_screen.visible = not help_screen.visible
-	if Input.is_action_just_pressed("map") and not _is_test():
-		map_overlay.toggle()
+	if not _is_test():
+		# Map: M at once. On a pad, View opens it on a short press (a long
+		# press of View skips Pip's tips instead).
+		if not GameInput.using_pad and Input.is_action_just_pressed("map"):
+			map_overlay.toggle()
+		elif GameInput.using_pad:
+			if Input.is_action_pressed("map"):
+				_map_hold += delta
+			elif Input.is_action_just_released("map"):
+				if _map_hold < 0.35:
+					map_overlay.toggle()
+				_map_hold = 0.0
 	if title_screen and title_screen.visible:
 		car.brake_input = 1.0
 	elif _buildtest or _m4test != "":
@@ -439,6 +476,8 @@ func _physics_process(delta: float) -> void:
 			_open_workshop()
 	else:
 		_drive_input(delta)
+	tutorial.update(delta)
+	_watch_for_tips()
 	_impact_cooldown -= delta
 	if has_job:
 		_contract_time += delta
@@ -464,6 +503,8 @@ func _drive_input(delta: float) -> void:
 	car.throttle_input = Input.get_axis("reverse", "accelerate")
 	car.steer_input = Input.get_axis("steer_right", "steer_left")
 	car.brake_input = Input.get_action_strength("brake")
+	if absf(car.throttle_input) > 0.1:
+		_finish_fits()           # driving off: the crew hurry up
 	if Input.is_action_just_pressed("base_menu"):
 		if _at_base():
 			_open_menu()
@@ -582,6 +623,44 @@ func _leave_title() -> void:
 	_show_message("Welcome to base! Pick your first contract.")
 
 
+## The crew finished bolting a part on: show it, with a little pop.
+func _on_crew_fitted(job: int) -> void:
+	var slot: String = _fit_jobs.get(job, "")
+	_fit_jobs.erase(job)
+	if slot == "" or not _pending_fits.has(slot):
+		return
+	_pending_fits.erase(slot)
+	_rebuild_car()
+	car.pop_in(slot)
+	_show_message("Fitted: %s" % Parts.get_part(slot, fitted[slot])["name"])
+
+
+## Finish every fit now (menu closed, or you drove off).
+func _finish_fits() -> void:
+	if _pending_fits.is_empty():
+		return
+	crew_fitter.finish_all()
+	_fit_jobs.clear()
+	var slots := _pending_fits.keys()
+	_pending_fits.clear()
+	_rebuild_car()
+	for slot in slots:
+		car.pop_in(slot)
+
+
+## A tuning slider moved: rebuild the truck once it stops moving (a rebuild
+## every slider tick would make dragging stutter).
+var _tuning_gen := 0
+func _on_tuning_changed(id: String, value: float) -> void:
+	tuning[id] = value
+	_tuning_gen += 1
+	var gen := _tuning_gen
+	get_tree().create_timer(0.35).timeout.connect(func():
+		if gen == _tuning_gen:
+			_rebuild_car()
+			_save_game())
+
+
 func _new_game() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))
 	skip_title = true
@@ -691,6 +770,7 @@ func _complete_delivery() -> void:
 	_unstrap_cargo()
 	var condition := cargo.condition
 	GameInput.rumble(0.4, 0.0, 0.3)
+	tutorial.on_delivered()
 	# Achievements.
 	Achievements.unlock("ACH_FIRST_DELIVERY")
 	if condition >= 99.5:
@@ -747,6 +827,11 @@ func _complete_delivery() -> void:
 		_show_message(msg)
 		if ending != "" or delivered_cargo == "kit":
 			_message_time = 12.0
+		if story_done and story_progress == 3:
+			# The tuning sliders unlock: Pip tells you a moment later.
+			get_tree().create_timer(5.0).timeout.connect(func():
+				_show_message("Pip: \"You've earned my old toolkit. Garage > Tuning: stiffness, ride height, tyre pressure, gearing.\"")
+				_message_time = 9.0)
 
 
 func _load_cargo(type_id: String = "crate") -> void:
@@ -1021,6 +1106,7 @@ func _build_outpost(id: String = "outpost") -> void:
 	crowd.radius = 5.5
 	add_child(crowd)
 	crowd.setup(terrain, at, BASE_RADIUS + 0.5)
+	crowds[id] = crowd
 	var lamp := OmniLight3D.new()
 	lamp.light_color = Color(1.0, 0.75, 0.45)
 	lamp.omni_range = 9.0
@@ -1342,26 +1428,23 @@ func _unstrap_cargo() -> void:
 
 
 ## A crew member runs out from the crowd carrying a box to `pos`.
+## Workshop: one crew member nips in, gives it a quick ratchet (0.6 s).
 func crew_carry_to(pos: Vector3) -> void:
-	var a := randf() * TAU
-	var from := _on_ground(_here_pos() + Vector3(cos(a), 0, sin(a)) * (BASE_RADIUS + 1.5))
-	var to := _on_ground(Vector3(pos.x, 0, pos.z) + (Vector3(pos.x, 0, pos.z) - Vector3(car.global_position.x, 0, car.global_position.z)).normalized() * 0.25)
-	var fig := TinyFigure.make(Color(0.95, 0.55, 0.15), 0.3)
-	var box := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = Vector3(0.14, 0.1, 0.14)
-	box.mesh = bm
-	box.position.y = 0.35
-	fig.add_child(box)
+	var out := Vector3(pos.x - car.global_position.x, 0, pos.z - car.global_position.z).normalized()
+	var to := _on_ground(Vector3(pos.x, 0, pos.z) + out * 0.3)
+	var from := _on_ground(to + out * 0.9)
+	var fig := TinyFigure.make(CrewCrowd.overall_color(randi() % 300), 0.3)
 	add_child(fig)
 	fig.global_position = from
-	fig.look_at_from_position(from, Vector3(to.x, from.y, to.z) + Vector3(0.001, 0, 0))
+	fig.look_at_from_position(from, Vector3(to.x, from.y, to.z) + Vector3(0.001, 0, 0), Vector3.UP, true)
+	sfx.play("ratchet", pos, -3.0, 1.15)
 	var tw := create_tween()
-	tw.tween_property(fig, "global_position", to, 0.5)
-	tw.tween_callback(box.queue_free)
-	tw.tween_property(fig, "global_position", to + Vector3.UP * 0.15, 0.1)
-	tw.tween_property(fig, "global_position", to, 0.1)
-	tw.tween_property(fig, "global_position", from, 0.5)
+	tw.tween_property(fig, "global_position", to, 0.18)
+	tw.tween_property(fig, "global_position", to + Vector3.UP * 0.1, 0.08)
+	tw.tween_property(fig, "global_position", to, 0.08)
+	tw.tween_property(fig, "global_position", to + Vector3.UP * 0.1, 0.08)
+	tw.tween_property(fig, "global_position", to, 0.08)
+	tw.tween_property(fig, "global_position", from, 0.18)
 	tw.tween_callback(fig.queue_free)
 
 
@@ -1377,7 +1460,8 @@ func _save_game() -> void:
 	var data := {"save_version": SAVE_VERSION, "money": money, "deliveries": deliveries, "fitted": fitted, "owned": owned,
 		"build": build, "inventory": inventory, "story": story_progress, "time": day_night.time,
 		"outposts": stations.filter(func(st): return st["built"] and st["id"] != "home").map(func(st): return st["id"]),
-		"glass_rescue_used": _glass_rescue_used}
+		"glass_rescue_used": _glass_rescue_used, "paint": paint, "tuning": tuning,
+		"tips_seen": tips_seen, "tutorial_done": tutorial_done}
 	# Written to a temp file and swapped in: a crash mid-save can't break it.
 	SaveIO.write_json(SAVE_PATH, data)
 
@@ -1392,6 +1476,18 @@ func _load_game() -> void:
 	# saves just get the defaults for anything they don't have.)
 	money = int(data.get("money", 0))
 	_glass_rescue_used = bool(data.get("glass_rescue_used", false))
+	var p = data.get("paint", {})
+	if typeof(p) == TYPE_DICTIONARY:
+		for k in PaintJob.default_paint():
+			if p.has(k):
+				paint[k] = p[k] if k == "decal" else int(p[k])
+	var tu = data.get("tuning", {})
+	if typeof(tu) == TYPE_DICTIONARY:
+		for k in Tuning.SLIDERS:
+			if tu.has(k):
+				tuning[k] = float(tu[k])
+	tips_seen = data.get("tips_seen", [])
+	tutorial_done = bool(data.get("tutorial_done", int(data.get("story", 0)) > 0))
 	story_progress = int(data.get("story", 0))
 	if data.get("outpost", false):
 		_build_outpost("outpost")       # (saves from milestone 5)
@@ -1414,7 +1510,7 @@ func _load_game() -> void:
 	for part_id in data.get("inventory", {}):
 		if BuildParts.CATALOGUE.has(part_id):
 			inventory[part_id] = int(data["inventory"][part_id])
-	if car.parts != fitted or not build.is_empty():
+	if car.parts != fitted or not build.is_empty() or paint != PaintJob.default_paint() or tuning != Tuning.defaults():
 		_rebuild_car()
 	print("Loaded save: $%d, %d deliveries" % [money, deliveries])
 
@@ -1428,6 +1524,7 @@ func _open_menu() -> void:
 
 func _close_menu() -> void:
 	menu.visible = false
+	_finish_fits()
 
 
 func _refresh_menu() -> void:
@@ -1455,6 +1552,9 @@ func _refresh_menu() -> void:
 		"fitted": fitted,
 		"owned": owned,
 		"travel": _travel_options(),
+		"paint": paint,
+		"tuning": tuning,
+		"tuning_unlocked": story_progress >= 3,
 	})
 
 
@@ -1463,6 +1563,8 @@ func _on_contract_picked(i: int) -> void:
 		return
 	_start_contract(offers[i])
 	_close_menu()
+	if contract.get("story", -1) == 0 and not tutorial_done and Settings.get_value("tutorial_tips"):
+		tutorial.start()
 	_play_crew_fitting()
 	_show_message("The crew loaded the %s. Deliver it to %s! (%s for the map)" % [
 		cargo.display_name().to_lower(), Contracts.spot_name(target_index), GameInput.prompt("map")])
@@ -1484,12 +1586,23 @@ func _on_part_clicked(slot: String, id: String) -> void:
 			return
 		money -= part["price"]
 		owned[slot].append(id)
+	var old: String = fitted[slot]
 	fitted[slot] = id
-	_play_crew_fitting()
-	_rebuild_car()
 	_refresh_menu()
 	_save_game()
-	_show_message("Fitted: %s" % part["name"])
+	var st := _station_here()
+	if _is_test() or st.is_empty() or not crowds.has(st["id"]):
+		_rebuild_car()      # tests (and odd cases): fitted at once
+		_show_message("Fitted: %s" % part["name"])
+		return
+	# The crew fetch it and bolt it on. Until then the truck shows the old part.
+	if not _pending_fits.has(slot):
+		_pending_fits[slot] = old
+	var heavy: bool = float(part.get("mass", 0.0)) > 8.0 or (slot == "bed" and id == "cage")
+	var job := crew_fitter.fit(crowds[st["id"]], _parts_pile(st["pos"]), car.global_position,
+			4 if heavy else 2, _fit_jobs.size() * 1.0)
+	_fit_jobs[job] = slot
+	_show_message("The crew are fitting the %s..." % part["name"].to_lower())
 
 
 ## Parts change how the truck is built, so build a new one in the same spot.
@@ -1525,6 +1638,45 @@ func _update_feel_and_achievements(delta: float) -> void:
 		Achievements.unlock("ACH_FULL_BUILD")
 
 
+## Pause > Replay First Day: do the first contract again with Pip (no pay).
+func replay_first_day() -> void:
+	if has_job:
+		_show_message("Finish (or lose!) your current job first.")
+		return
+	terrain.ensure_active_at(BASE_POS.x, BASE_POS.z)
+	_release_scorpions()
+	car.place_at(_on_ground(BASE_POS) + Vector3(0, 0.8, 0), PI)
+	_sync_trailer()
+	var c: Dictionary = Story.CONTRACTS[0].duplicate()
+	c["pay"] = 0
+	c["distance"] = 0.0
+	_start_contract(c)
+	tutorial.start()
+
+
+## One-off tips from Pip, the first time each thing happens.
+func _watch_for_tips() -> void:
+	if _is_test() or not tutorial:
+		return
+	for b in beetles:
+		if b.state == DungBeetle.State.WINDUP and b.global_position.distance_to(car.global_position) < 12.0:
+			tutorial.tip("beetle")
+	if cargo and _crate_dropped():
+		for colony in colonies:
+			if colony.state == AntColony.State.MARCHING:
+				tutorial.tip("ants")
+		tutorial.tip("dropped")
+
+
+## The parts the truck SHOWS: what's fitted, except slots the crew are
+## still working on.
+func _shown_parts() -> Dictionary:
+	var shown := fitted.duplicate()
+	for slot in _pending_fits:
+		shown[slot] = _pending_fits[slot]
+	return shown
+
+
 func _rebuild_car() -> void:
 	var xform := car.global_transform
 	var charge := car.get_battery_percent()
@@ -1534,8 +1686,10 @@ func _rebuild_car() -> void:
 	old.queue_free()
 	car = RCCar.new()
 	car.terrain = terrain
-	car.parts = fitted.duplicate()
+	car.parts = _shown_parts()
 	car.build = build.duplicate()
+	car.paint = paint.duplicate()
+	car.tuning = tuning.duplicate()
 	add_child(car)
 	car.global_transform = xform
 	car.reset_physics_interpolation()
@@ -2000,7 +2154,20 @@ func _build_base_pad(where: Vector3) -> Node3D:
 	var pad := Models.make("landing_pad")
 	add_child(pad)
 	pad.global_position = _on_ground(where) - Vector3(0, 0.015, 0)
+	# The parts pile, where the crew fetch what you buy.
+	var pile := _parts_pile(where)
+	for spec in [["crate", Vector3(0, 0.2, 0), 0.0], ["crate", Vector3(0.1, 0.6, 0.05), 0.4],
+			["prop_toolbox", Vector3(0.45, 0.0, 0.2), 1.2], ["barrel", Vector3(-0.4, 0.25, 0.15), 0.0]]:
+		var prop := Models.make(spec[0])
+		add_child(prop)
+		prop.global_position = pile + spec[1]
+		prop.rotation.y = spec[2]
 	return pad
+
+
+## Where a base's parts pile sits: just off the pad.
+func _parts_pile(station_pos: Vector3) -> Vector3:
+	return _on_ground(station_pos + Vector3(-(BASE_RADIUS + 1.4), 0, 1.2))
 
 
 func _make_beacon() -> Node3D:
@@ -3845,3 +4012,233 @@ func _ev_button(button: int) -> InputEventJoypadButton:
 	var e := InputEventJoypadButton.new()
 	e.button_index = button
 	return e
+
+
+# ---------------------------------------------------------------------------
+# Customisation and tutorial tests.
+#   godot --headless --path . -- --customtest
+#   godot --headless --path . -- --tutorialtest
+# ---------------------------------------------------------------------------
+
+## Top speed reached on flat ground in 6 s, and the distance after 1.5 s
+## (how hard it pulls away).
+func _ct_speed_run(at: Vector3) -> Vector2:
+	_m5_put_truck(at, PI / 2.0)
+	await _wait(0.6)
+	var x0 := car.global_position.x
+	car.throttle_input = 1.0
+	var top := 0.0
+	var early := 0.0
+	var t := 0.0
+	while t < 6.0:
+		await get_tree().physics_frame
+		t += 1.0 / Engine.physics_ticks_per_second
+		top = maxf(top, car.linear_velocity.length())
+		if early == 0.0 and t >= 1.5:
+			early = car.global_position.x - x0
+	car.throttle_input = 0.0
+	return Vector2(top, early)
+
+
+func _run_customtest() -> void:
+	terrain.finish_all_tiles()
+	await _wait(0.3)
+	_m4_clear_beetles()
+	var r := {}
+	money = 1000
+	story_progress = 5
+	# 1. Paint: the truck's own material gets the colours; decals appear.
+	paint = {"body": 6, "trim": 2, "decal": "race_number", "number": 42}
+	car.set_paint(paint)
+	var mat: ShaderMaterial = null
+	for mi in car.find_children("*", "MeshInstance3D", true, false):
+		var m = (mi as MeshInstance3D).get_surface_override_material(0) if (mi as MeshInstance3D).get_surface_override_material_count() > 0 else null
+		if m is ShaderMaterial and m.get_shader_parameter("use_paint"):
+			mat = m
+			break
+	r["paint_body_teal"] = mat != null and mat.get_shader_parameter("paint_color").is_equal_approx(PaintJob.COLORS[6][1])
+	r["shared_palette_untouched"] = not Models.palette_material().get_shader_parameter("use_paint")
+	var labels := car.find_children("*", "Label3D", true, false)
+	r["race_number_labels"] = labels.size()
+	r["race_number_text"] = labels[0].text if labels.size() > 0 else ""
+	for d in ["side_flash", "flames", "beetle", "twin_stripes", "none"]:
+		paint["decal"] = d
+		car.set_paint(paint)
+		r["decal_" + d + "_pieces"] = car.get_node("Decals").get_child_count()
+	# 2. Tuning really changes the physics. Flat hardpan near base.
+	var flat := BASE_POS + Vector3(0, 0, -6)
+	var results := {}
+	for g in [0.75, 1.0, 1.35]:
+		tuning = Tuning.defaults()
+		tuning["gearing"] = g
+		_rebuild_car()
+		results[g] = await _ct_speed_run(flat)
+	r["gearing_top_speed_0.75_1.0_1.35"] = [snappedf(results[0.75].x, 0.01), snappedf(results[1.0].x, 0.01), snappedf(results[1.35].x, 0.01)]
+	r["gearing_pull_1.5s_0.75_1.0_1.35"] = [snappedf(results[0.75].y, 0.01), snappedf(results[1.0].y, 0.01), snappedf(results[1.35].y, 0.01)]
+	tuning = Tuning.defaults()
+	tuning["ride_height"] = 0.26
+	tuning["stiffness"] = 55.0
+	tuning["pressure"] = 1.0
+	_rebuild_car()
+	r["tuned_rest_length"] = car.wheels[0].wheel_rest_length
+	r["tuned_stiffness"] = car.wheels[0].suspension_stiffness
+	r["hard_tyres_grip"] = snappedf(car.wheel_grip, 0.01)
+	tuning = Tuning.defaults()
+	_rebuild_car()
+	r["default_grip"] = snappedf(car.wheel_grip, 0.01)
+	# 3. The crew fit a part: ~3 s, the old part shown until then.
+	_m5_put_truck(BASE_POS, PI)
+	await _wait(0.5)
+	var crowd: CrewCrowd = crowds["home"]
+	var fitted_jobs := []
+	crew_fitter.fitted.connect(func(j): fitted_jobs.append(j))
+	_m4test = ""                  # (the purchase flow skips the crew in tests)
+	_autotest = false
+	var saved_flag := _buildtest
+	# Pretend we're playing: buy balloon tyres at base.
+	var t0 := Time.get_ticks_msec()
+	_m4test = "customtest_live"
+	r["crowd_busy_before"] = crowd._busy.size()
+	_on_part_clicked_live("tyres", "balloon")
+	r["shown_while_fitting"] = car.parts["tyres"]
+	r["crowd_busy_while_fitting"] = crowd._busy.size()
+	await _wait(3.3)
+	r["shown_after_3s"] = car.parts["tyres"]
+	r["fit_jobs_done"] = fitted_jobs.size()
+	await _wait(1.5)
+	r["crowd_busy_after"] = crowd._busy.size()
+	# Two purchases, then drive off: both finish at once.
+	_on_part_clicked_live("motor", "torque")
+	_on_part_clicked_live("battery", "big")
+	await _wait(0.5)
+	_finish_fits()
+	r["finish_early_motor"] = car.parts["motor"]
+	r["finish_early_battery"] = car.parts["battery"]
+	await _wait(0.2)
+	r["crowd_busy_after_finish"] = crowd._busy.size()
+	_buildtest = saved_flag
+	# 4. Save and load keep paint and tuning.
+	paint = {"body": 3, "trim": 9, "decal": "flames", "number": 7}
+	tuning["gearing"] = 1.2
+	var data := {"paint": paint, "tuning": tuning}
+	r["saved_paint_roundtrip"] = JSON.parse_string(JSON.stringify(data))["paint"]["decal"] == "flames"
+	print("CUSTOMTEST ", JSON.stringify(r, "  "))
+	get_tree().quit()
+
+
+## The live (non-test) purchase path, for the customtest.
+func _on_part_clicked_live(slot: String, id: String) -> void:
+	var part := Parts.get_part(slot, id)
+	if not id in owned[slot]:
+		money -= part["price"]
+		owned[slot].append(id)
+	var old: String = fitted[slot]
+	fitted[slot] = id
+	if not _pending_fits.has(slot):
+		_pending_fits[slot] = old
+	var heavy: bool = float(part.get("mass", 0.0)) > 8.0
+	var job := crew_fitter.fit(crowds["home"], _parts_pile(BASE_POS), car.global_position, 4 if heavy else 2, _fit_jobs.size() * 1.0)
+	_fit_jobs[job] = slot
+
+
+func _run_tutorialtest() -> void:
+	terrain.finish_all_tiles()
+	await _wait(0.3)
+	_m4_clear_beetles()
+	var r := {}
+	Settings.values["tutorial_tips"] = true
+	tutorial_done = false
+	story_progress = 0
+	_m5_put_truck(BASE_POS, PI)
+	await _wait(0.5)
+	offers = _make_offers()
+	r["first_offer"] = offers[0].get("title", "")
+	var ridge_h0 := terrain.get_height(BASE_POS.x + (DELIVERY_SPOTS[2] - BASE_POS).normalized().x * 12.0,
+			BASE_POS.z + (DELIVERY_SPOTS[2] - BASE_POS).normalized().z * 12.0)
+	_on_contract_picked(0)
+	r["tutorial_active"] = tutorial.active
+	r["panel_text"] = tutorial._text.text
+	var dir := (DELIVERY_SPOTS[2] - BASE_POS).normalized()
+	r["ridge_raised_cm"] = snappedf((terrain.get_height(BASE_POS.x + dir.x * 12.0, BASE_POS.z + dir.z * 12.0) - ridge_h0) * 100.0, 0.1)
+	# Step 1: gentle throttle until we're moving.
+	var t := 0.0
+	car.throttle_input = 0.6
+	while tutorial.step == 0 and t < 6.0:
+		await get_tree().physics_frame
+		t += 1.0 / Engine.physics_ticks_per_second
+	r["after_throttle"] = tutorial.steps_done.duplicate()
+	# Step 2: steer and brake.
+	car.steer_input = 0.8
+	t = 0.0
+	while t < 1.0:
+		await get_tree().physics_frame
+		t += 1.0 / Engine.physics_ticks_per_second
+	car.steer_input = 0.0
+	car.throttle_input = 0.0
+	car.brake_input = 1.0
+	t = 0.0
+	while tutorial.step == 1 and t < 2.0:
+		await get_tree().physics_frame
+		t += 1.0 / Engine.physics_ticks_per_second
+	car.brake_input = 0.0
+	r["after_steer_brake"] = tutorial.steps_done.duplicate()
+	r["hardpan_arrow_shown"] = tutorial._arrow != null
+	# Step 3: park on hardpan (the arrow's spot).
+	if tutorial._hardpan_spot != Vector3.INF:
+		_m5_put_truck(tutorial._hardpan_spot, PI)
+		_put_cargo_on_bed()        # (teleporting leaves the crate behind otherwise)
+	t = 0.0
+	while tutorial.step == 2 and t < 4.0:
+		await get_tree().physics_frame
+		t += 1.0 / Engine.physics_ticks_per_second
+	r["after_hardpan"] = tutorial.steps_done.duplicate()
+	# Steps 4-5: drive gently over soft sand towards C, over the ridge.
+	_m5_put_truck(BASE_POS + dir * 6.0, atan2(dir.x, dir.z))
+	_put_cargo_on_bed()
+	await _wait(0.4)
+	t = 0.0
+	while tutorial.step < 5 and t < 14.0:
+		await get_tree().physics_frame
+		t += 1.0 / Engine.physics_ticks_per_second
+		var v := car.linear_velocity.dot(car.global_basis.z)
+		car.throttle_input = clampf((2.0 - v) * 0.6 + 0.1, 0.0, 0.7)
+	car.throttle_input = 0.0
+	r["after_soft_and_ridge"] = tutorial.steps_done.duplicate()
+	r["soft_metres"] = snappedf(tutorial._soft_m, 0.1)
+	# Delivery finishes it; then Pip's goodbye (5 s) ends the tutorial.
+	await _m4_deliver_now()
+	r["after_delivery_step"] = tutorial.STEPS[mini(tutorial.step, tutorial.STEPS.size() - 1)][0]
+	t = 0.0
+	while tutorial.active and t < 7.0:
+		await get_tree().physics_frame
+		t += 1.0 / Engine.physics_ticks_per_second
+	r["finished"] = not tutorial.active
+	r["tutorial_done_flag"] = tutorial_done
+	r["story_progress"] = story_progress
+	# Skipping: start again, hold the skip button for over a second.
+	tutorial.start()
+	var ev := InputEventKey.new()
+	ev.physical_keycode = KEY_TAB
+	ev.pressed = true
+	Input.parse_input_event(ev)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	t = 0.0
+	while tutorial.active and t < 2.0:
+		await get_tree().physics_frame
+		t += 1.0 / Engine.physics_ticks_per_second
+	ev = ev.duplicate()
+	ev.pressed = false
+	Input.parse_input_event(ev)
+	r["skip_after_s"] = snappedf(t, 0.1)
+	r["skipped"] = not tutorial.active
+	# One-off tips: once only.
+	tips_seen = []
+	_m4test = "tips"
+	tutorial.tip("beetle")
+	r["tip_text"] = tutorial._text.text.left(30)
+	tutorial.tip("beetle")
+	r["tips_seen"] = tips_seen.duplicate()
+	r["prompt_filled"] = Tutorial.fill("Press {load_crate}")
+	print("TUTORIALTEST ", JSON.stringify(r, "  "))
+	get_tree().quit()

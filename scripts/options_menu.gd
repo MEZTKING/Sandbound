@@ -29,6 +29,7 @@ func _ready() -> void:
 	_toggle(grid, "Invert camera Y", "invert_y")
 	_toggle(grid, "Camera shake", "camera_shake")
 	_slider(grid, "Rumble", "rumble", 0.0, 1.0, 0.25, true)
+	_toggle(grid, "Tutorial tips (Old Pip)", "tutorial_tips")
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	add_child(row)

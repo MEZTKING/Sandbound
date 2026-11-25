@@ -326,7 +326,7 @@ def truck_body():
         box("lamp_r", (0.12, 0.02, 0.06), G(0.36, 0.03, 0.905), "headlight", bevel=0.006),
         box("tail_l", (0.1, 0.02, 0.05), G(-0.38, 0.03, -0.905), "taillight", bevel=0.006),
         box("tail_r", (0.1, 0.02, 0.05), G(0.38, 0.03, -0.905), "taillight", bevel=0.006),
-        box("stripe", (0.12, 0.36, 0.004), G(0, 0.459, 0.52), "white", bevel=0.0),
+        # (Stripes, numbers and flames are decals now: the Paint tab.)
     ]
     # Wheel arches over all four wheels (wheels sit at x +-0.62, z +-0.68).
     for x in (-0.62, 0.62):

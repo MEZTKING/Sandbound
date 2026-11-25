@@ -129,6 +129,7 @@ func place(socket_id: String, part_id: String) -> bool:
 	main.build[socket_id] = part_id
 	main.crew_carry_to(main.car.to_global(BuildParts.SOCKETS[socket_id]["pos"]))
 	_rebuild()
+	main.car.pop_in(socket_id)      # it pops into place
 	return true
 
 

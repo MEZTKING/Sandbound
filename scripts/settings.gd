@@ -27,6 +27,7 @@ const DEFAULTS := {
 	"invert_y": false,
 	"camera_shake": true,
 	"rumble": 1.0,              # 0 = off
+	"tutorial_tips": true,      # Old Pip's tips
 }
 
 var values := {}

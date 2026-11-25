@@ -7,6 +7,7 @@ extends CanvasLayer
 signal resumed
 signal return_to_title
 signal quit_game
+signal replay_tutorial
 
 var _pages := {}
 var _confirm_box: VBoxContainer
@@ -30,6 +31,9 @@ func _ready() -> void:
 	main_page.add_child(UIKit.button("Resume", close))
 	main_page.add_child(UIKit.button("Options", func(): _show("options")))
 	main_page.add_child(UIKit.button("Controls", func(): _show("controls")))
+	main_page.add_child(UIKit.button("Replay First Day", func():
+		close()
+		replay_tutorial.emit()))
 	main_page.add_child(UIKit.button("Return to Title", func():
 		_ask("Return to the title screen? (Your progress is saved.)", func(): return_to_title.emit())))
 	main_page.add_child(UIKit.button("Quit to Desktop", func():

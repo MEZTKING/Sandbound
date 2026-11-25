@@ -101,6 +101,7 @@ var _original_tex: ImageTexture
 var _surface_img: Image
 var _surface_tex: ImageTexture
 var _surface_dirty := false
+var _original_dirty := false
 var _flow_tex: ImageTexture
 # Built on the generating thread, turned into textures on the main thread.
 var _surface_bytes := PackedByteArray()
@@ -624,6 +625,10 @@ func _process(delta: float) -> void:
 ## Send changed sand data to the GPU.
 func _upload() -> void:
 	var t0 := Time.get_ticks_usec()
+	if _original_dirty:
+		_original_dirty = false
+		_original_tex.update(Image.create_from_data(verts_per_side, verts_per_side, false,
+				Image.FORMAT_RF, original.to_byte_array()))
 	if _heights_dirty:
 		_heights_dirty = false
 		_height_tex.update(Image.create_from_data(verts_per_side, verts_per_side, false,
@@ -701,6 +706,45 @@ func press(center: Vector3, radius: float, amount: float, max_depth: float) -> R
 	var touched := Rect2i(i0, j0, i1 - i0, j1 - j0)
 	if has_flow and flow[idx(clampi(int(g.x), 0, cells_per_side), clampi(int(g.y), 0, cells_per_side))] > 0.05:
 		_refill = touched if _refill.size == Vector2i.ZERO else _refill.merge(touched)
+	return touched
+
+
+## Raise a low ridge of sand along a line (the tutorial's "mind that
+## ridge"). It becomes part of the ground: `original` rises too, so it isn't
+## drawn as a rut or a pile. Returns true if it touched this tile.
+func raise_ridge(a: Vector3, b: Vector3, height_m: float, width_m: float) -> bool:
+	var ga := world_to_grid(a)
+	var gb := world_to_grid(b)
+	var half_w := width_m / cell_size
+	var lo := Vector2(minf(ga.x, gb.x), minf(ga.y, gb.y)) - Vector2.ONE * (half_w + 1.0)
+	var hi := Vector2(maxf(ga.x, gb.x), maxf(ga.y, gb.y)) + Vector2.ONE * (half_w + 1.0)
+	var i0 := clampi(int(lo.x), 0, cells_per_side)
+	var i1 := clampi(int(hi.x), 0, cells_per_side)
+	var j0 := clampi(int(lo.y), 0, cells_per_side)
+	var j1 := clampi(int(hi.y), 0, cells_per_side)
+	if i0 >= i1 or j0 >= j1:
+		return false
+	var seg := gb - ga
+	var touched := false
+	for j in range(j0, j1 + 1):
+		for i in range(i0, i1 + 1):
+			var p := Vector2(i, j)
+			var t := clampf((p - ga).dot(seg) / seg.length_squared(), 0.0, 1.0)
+			var d := p.distance_to(ga + seg * t) / half_w
+			if d < 1.0:
+				var k := idx(i, j)
+				var bump := height_m / cell_size * (0.5 + 0.5 * cos(d * PI))   # smooth hump
+				var target := original[k] + bump
+				if heights[k] < target:
+					var raise := target - heights[k]
+					heights[k] += raise
+					original[k] += raise
+					touched = true
+	if touched:
+		_mark_dirty(i0, j0, i1, j1)
+		_original_dirty = true
+		if not active:
+			_upload()          # (inactive tiles don't upload by themselves)
 	return touched
 
 

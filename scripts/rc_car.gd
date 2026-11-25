@@ -19,6 +19,16 @@ var parts: Dictionary = Parts.default_loadout()
 ## What's bolted to each socket, e.g. {"L0": "ballast", "F1": "winch"}.
 ## See build_parts.gd. Set before adding the truck to the scene.
 var build: Dictionary = {}
+## Paint job and tuning (set before adding the truck to the scene).
+var paint: Dictionary = PaintJob.default_paint()
+# Visual pieces, so a newly fitted part can "pop" into place.
+var _body_model: Node3D
+var _bed_model: Node3D
+var _tyre_models: Array[Node3D] = []
+## Short gearing: the motor runs out of revs above this speed (m/s).
+var governor_speed := INF
+var _part_models := {}      # socket id -> model
+var tuning: Dictionary = Tuning.defaults()
 
 @export var brake_power: float = 3.0
 @export var max_steer: float = 0.55         ## Radians.
@@ -143,6 +153,7 @@ func _ready() -> void:
 	for x in [-0.62, 0.62]:
 		for z in [0.68, -0.68]:
 			_add_wheel(Vector3(x, -0.05, z), z > 0.0)
+	PaintJob.apply(self, paint)
 	# One dust spray per wheel, attached to the body (not the spinning wheel).
 	for w in wheels:
 		var spray := SandDust.make_wheel_spray()
@@ -170,6 +181,24 @@ func _apply_parts() -> void:
 	drag_mult = t["drag"]
 	engine_power = m["power"]
 	top_speed_drag = m["top_speed_drag"]
+	# Tuning (garage sliders).
+	var press := Tuning.pressure_effects(Tuning.value(tuning, "pressure"))
+	wheel_grip *= press.x
+	sink_mult *= press.y
+	drag_mult *= press.z
+	var gear := Tuning.value(tuning, "gearing")
+	engine_power *= gear                 # more pull...
+	# ...but a lower top speed (and tall gears the other way round). Two
+	# tries that the customisation test measured and rejected: a fixed extra
+	# drag (low gears ended up FASTER) and drag x gear squared (it killed the
+	# extra pull too). What works: tall gears (< 1) get less drag, so they
+	# run faster; short gears (> 1) keep their pull but the motor runs out of
+	# revs at a lower speed (a "governor", like a real RC speed controller).
+	if gear < 1.0:
+		drag_mult *= gear * gear
+	else:
+		governor_speed = 7.4 / gear
+	dig_mult *= gear                     # and the wheels spin up more easily
 	drain_mult = m["drain"]
 	soft_sand_power = m["soft_sand_power"]
 	battery_capacity = b["capacity"]
@@ -194,7 +223,8 @@ func _build_body() -> void:
 	# Chassis: one box for physics, one for looks.
 	# Physics: plain boxes. Looks: the Blender model (models/truck_body.glb).
 	_add_box(Vector3(1.0, 0.25, 1.8), Vector3(0, 0, 0), null, true)
-	add_child(Models.make("truck_body"))
+	_body_model = Models.make("truck_body")
+	add_child(_body_model)
 
 	# Walls around the cargo bed (back half).
 	var bed := Parts.get_part("bed", parts["bed"])
@@ -207,7 +237,8 @@ func _build_body() -> void:
 	]:
 		_add_box(spec[0], spec[1], null, true)       # physics only...
 	# ...the looks: the Blender model (red walls, a rail on top, ribs).
-	add_child(Models.make("bed_high" if wall_h > 0.3 else "bed_low"))
+	_bed_model = Models.make("bed_high" if wall_h > 0.3 else "bed_low")
+	add_child(_bed_model)
 	if bed["cage"]:
 		# Bars on top and a front wall: a closed box the cargo can't escape.
 		var top := 0.125 + wall_h + 0.3
@@ -271,7 +302,9 @@ func _add_build_parts() -> void:
 				mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 				mat.albedo_color.a = 0.0
 		if part_id != "net":
-			_add_part_box(size, xform, mat, part_id)
+			var model := _add_part_box(size, xform, mat, part_id)
+			if model:
+				_part_models[socket_id] = model
 		match part_id:
 			"bumper":
 				var n: Vector3 = BuildParts.SOCKETS[socket_id]["normal"]
@@ -308,7 +341,7 @@ func _add_build_parts() -> void:
 ## Part boxes are rotated to face out from the truck, so they need a full
 ## transform (not just a position). Physics: a plain box. Looks: the Blender
 ## model models/part_<id>.glb (or a coloured box if there isn't one).
-func _add_part_box(size: Vector3, xform: Transform3D, mat: Material, part_id := "") -> void:
+func _add_part_box(size: Vector3, xform: Transform3D, mat: Material, part_id := "") -> Node3D:
 	var col := CollisionShape3D.new()
 	var box := BoxShape3D.new()
 	box.size = size
@@ -319,7 +352,7 @@ func _add_part_box(size: Vector3, xform: Transform3D, mat: Material, part_id := 
 		var model := Models.make("part_" + part_id)
 		model.transform = xform
 		add_child(model)
-		return
+		return model
 	var mi := MeshInstance3D.new()
 	var bm := BoxMesh.new()
 	bm.size = size
@@ -327,6 +360,7 @@ func _add_part_box(size: Vector3, xform: Transform3D, mat: Material, part_id := 
 	mi.transform = xform
 	mi.material_override = mat
 	add_child(mi)
+	return mi
 
 
 func _add_net_visual(xform: Transform3D) -> void:
@@ -510,9 +544,9 @@ func _add_wheel(pos: Vector3, is_front: bool) -> void:
 	# Wider tyres sit further out so they don't hit the body.
 	w.position = pos + Vector3(signf(pos.x) * (wheel_width - 0.22) * 0.5, 0, 0)
 	w.wheel_radius = wheel_radius
-	w.wheel_rest_length = 0.18
+	w.wheel_rest_length = Tuning.value(tuning, "ride_height")
 	w.suspension_travel = 0.2
-	w.suspension_stiffness = 35.0     # (Godot multiplies these by the car's mass)
+	w.suspension_stiffness = Tuning.value(tuning, "stiffness")   # (Godot multiplies these by the car's mass)
 	w.suspension_max_force = 6000.0
 	w.damping_compression = 2.0
 	w.damping_relaxation = 2.6
@@ -525,7 +559,9 @@ func _add_wheel(pos: Vector3, is_front: bool) -> void:
 
 	# The tyre model (Blender: models/tyre_*.glb). It's a child of the wheel,
 	# so Godot spins and steers it for us.
-	w.add_child(Models.make("tyre_" + parts["tyres"]))
+	var tyre := Models.make("tyre_" + parts["tyres"])
+	w.add_child(tyre)
+	_tyre_models.append(tyre)
 
 
 ## Throttle -1..1, steer -1..1 (+ = left), brake 0..1. Called by the player
@@ -555,6 +591,10 @@ func _physics_process(delta: float) -> void:
 			power *= limp_power   # flat battery: crawl home
 		# Some motors struggle in soft sand.
 		power *= lerpf(soft_sand_power, 1.0, _hardness_under)
+		# Out of revs (short gearing): the push fades over the last 15%.
+		var fwd_speed := absf(linear_velocity.dot(global_basis.z))
+		if fwd_speed > governor_speed * 0.85:
+			power *= clampf((governor_speed - fwd_speed) / (governor_speed * 0.15), 0.0, 1.0)
 		engine_force = _throttle * power
 	brake = brake_input * brake_power
 	# Drag brake, like a real RC motor: off the throttle, the motor resists a
@@ -841,6 +881,36 @@ func get_spin_amount() -> float:
 ## 0 = soft sand, 1 = firm hardpan, under the wheels right now.
 func get_ground_hardness() -> float:
 	return _hardness_under
+
+
+## A part was just fitted: make it pop into place (small, then a bounce).
+## `what` is a garage slot ("tyres", "bed"...) or a workshop socket ("L1").
+func pop_in(what: String) -> void:
+	var nodes: Array[Node3D] = []
+	match what:
+		"tyres":
+			nodes = _tyre_models
+		"bed":
+			nodes = [_bed_model]
+		"motor", "battery":
+			nodes = [_body_model]
+		_:
+			if _part_models.has(what):
+				nodes = [_part_models[what]]
+	for n in nodes:
+		if n == null:
+			continue
+		var full := n.scale
+		n.scale = full * 0.4
+		var tw := n.create_tween()
+		tw.tween_property(n, "scale", full * 1.12, 0.14).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_property(n, "scale", full, 0.12)
+
+
+## Repaint without rebuilding (the Paint tab's live preview).
+func set_paint(p: Dictionary) -> void:
+	paint = p.duplicate()
+	PaintJob.apply(self, paint)
 
 
 ## Hold the truck perfectly still (the workshop uses this). Locking every

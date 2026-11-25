@@ -269,6 +269,17 @@ func press(center: Vector3, radius: float, amount: float, max_depth: float) -> v
 		_match_seams(touched)
 
 
+## A low ridge of sand along a line (the tutorial uses one).
+func raise_ridge(a: Vector3, b: Vector3, height_m: float, width_m: float) -> void:
+	var touched: Array[SandTile] = []
+	for c in tiles:
+		var t: SandTile = tiles[c]
+		if t.data_ready and t.raise_ridge(a, b, height_m, width_m):
+			touched.append(t)
+	if touched.size() > 1:
+		_match_seams(touched)
+
+
 ## Salt crust breaks under a heavy wheel. Returns true if any broke.
 func break_crust(center: Vector3, radius: float, drop_m: float) -> bool:
 	var broke := false

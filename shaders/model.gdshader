@@ -15,6 +15,16 @@
 shader_type spatial;
 
 uniform sampler2D palette : source_color, filter_nearest_mipmap;
+/** Rows in the palette grid (it's 8 squares wide; Models sets this). */
+uniform float palette_rows = 9.0;
+
+group_uniforms Paint;
+/** The player's paint job (only the truck's own copy of this material turns
+ * it on): the "truck_red" square becomes paint_color, "truck_red_dark"
+ * becomes trim_color. */
+uniform bool use_paint = false;
+uniform vec4 paint_color : source_color = vec4(0.74, 0.20, 0.12, 1.0);
+uniform vec4 trim_color : source_color = vec4(0.13, 0.12, 0.12, 1.0);
 uniform sampler2D material_palette : hint_default_black, filter_nearest_mipmap;
 uniform sampler2D grime : hint_default_white, filter_linear_mipmap, repeat_enable;
 
@@ -55,6 +65,16 @@ float triplanar_grime(vec3 p, vec3 n) {
 
 void fragment() {
 	vec3 base = texture(palette, UV).rgb;
+	if (use_paint) {
+		// Which palette square is this? (0,0) = truck_red, (1,0) = truck_red_dark.
+		ivec2 cell = ivec2(floor(UV * vec2(8.0, palette_rows)));
+		float shade = dot(base, vec3(0.333));   // keep the square's painted texture
+		if (cell == ivec2(0, 0)) {
+			base = paint_color.rgb * shade / 0.353;
+		} else if (cell == ivec2(1, 0)) {
+			base = trim_color.rgb * shade / 0.207;
+		}
+	}
 	vec3 mat = texture(material_palette, UV).rgb;   // roughness, metal, glow
 	float ao = mix(1.0, pow(clamp(COLOR.g, 0.0, 1.0), ao_curve), ao_strength);
 	float g = triplanar_grime(world_pos, world_normal);
