@@ -36,7 +36,7 @@ AT A BASE
 GENERAL
   M       map        F1     this help      Esc    pause / options
   G       graphics quality                 T      tilt-shift blur
-  V       V-Sync"""
+  V       V-Sync                           F12    screenshot"""
 
 
 const TIPS := """TIPS

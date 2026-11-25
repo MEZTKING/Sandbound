@@ -1,0 +1,16 @@
+API Name,Display Name,Description,Hidden,Icon (achieved),Icon (not achieved)
+ACH_FIRST_DELIVERY,Signed For,Complete your first delivery.,0,icons/ACH_FIRST_DELIVERY.png,icons/ACH_FIRST_DELIVERY_locked.png
+ACH_RING_SALT,Salt of the Earth,Reach the Salt Flats.,0,icons/ACH_RING_SALT.png,icons/ACH_RING_SALT_locked.png
+ACH_RING_GLASS,Handle With Care,Reach the Glass Desert.,0,icons/ACH_RING_GLASS.png,icons/ACH_RING_GLASS_locked.png
+ACH_RING_DRIFT,Light Load,Reach the Drift.,0,icons/ACH_RING_DRIFT.png,icons/ACH_RING_DRIFT_locked.png
+ACH_STORY_DONE,End of the Line,Complete all 28 story contracts.,0,icons/ACH_STORY_DONE.png,icons/ACH_STORY_DONE_locked.png
+ACH_OUTPOSTS_ALL,Supply Chain,Build all three outposts.,0,icons/ACH_OUTPOSTS_ALL.png,icons/ACH_OUTPOSTS_ALL_locked.png
+ACH_FAST_TRAVEL,Shortcut,Use fast travel for the first time.,0,icons/ACH_FAST_TRAVEL.png,icons/ACH_FAST_TRAVEL_locked.png
+ACH_PRISTINE_10,Not a Scratch,Deliver 10 cargoes in perfect condition.,0,icons/ACH_PRISTINE_10.png,icons/ACH_PRISTINE_10_locked.png
+ACH_BARELY,Technically Delivered,Deliver cargo at under 10% condition.,0,icons/ACH_BARELY.png,icons/ACH_BARELY_locked.png
+ACH_HAWK_ROBBED,Air Mail,Have a hawk steal your cargo.,0,icons/ACH_HAWK_ROBBED.png,icons/ACH_HAWK_ROBBED_locked.png
+ACH_ANT_RECOVER,Finders Keepers,"Reload cargo you dropped before the ants take it, 5 times.",0,icons/ACH_ANT_RECOVER.png,icons/ACH_ANT_RECOVER_locked.png
+ACH_SCORPION_FLAT,Three Wheels Good,Complete a delivery with a flat or clamped wheel.,0,icons/ACH_SCORPION_FLAT.png,icons/ACH_SCORPION_FLAT_locked.png
+ACH_NO_RESCUE_RING,Self-Sufficient,Complete every Glass Desert story contract without a rescue tow.,0,icons/ACH_NO_RESCUE_RING.png,icons/ACH_NO_RESCUE_RING_locked.png
+ACH_FULL_BUILD,Bolted On,Fill all 19 sockets on one truck.,0,icons/ACH_FULL_BUILD.png,icons/ACH_FULL_BUILD_locked.png
+ACH_DRIFT_AIR,"Low Gravity, High Hopes",Stay airborne for 5 seconds in the Drift.,0,icons/ACH_DRIFT_AIR.png,icons/ACH_DRIFT_AIR_locked.png

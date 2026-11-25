@@ -24,6 +24,8 @@ func _ready() -> void:
 		m.title_screen.visible = false
 	m._close_menu()
 	m._m4test = "beauty"                  # (stops input handling and save files)
+	Achievements.enabled = false          # building outposts here mustn't unlock anything
+	m.message.visible = false             # no pop-up messages in the pictures
 	m.terrain.finish_all_tiles()
 	m.day_night.paused = true
 	m.day_night.skip_to(0.36)             # mid-morning: low, warm sun

@@ -212,7 +212,7 @@ func _ready() -> void:
 	_buildtest = "--buildtest" in OS.get_cmdline_user_args()
 	for t in ["hawktest", "windtest", "daytest", "storytest", "worldtest", "crusttest", "scorpiontest", "outposttest",
 			"glasstest", "magnettest", "shardtest", "traveltest",
-			"gravitytest", "flowtest", "raytest", "drifttest"]:
+			"gravitytest", "flowtest", "raytest", "drifttest", "controllertest"]:
 		if ("--" + t) in OS.get_cmdline_user_args():
 			_m4test = t
 	_rng.seed = 2026
@@ -518,6 +518,9 @@ func _hold_progress(action: String, seconds: float) -> float:
 
 ## Esc / Menu: close whatever is open first, otherwise pause.
 func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("screenshot"):
+		_take_screenshot()
+		return
 	if _is_test() or (title_screen and title_screen.visible) or pause_menu.visible:
 		return
 	if event.is_action_pressed("pause"):
@@ -541,11 +544,27 @@ func _unhandled_input(event: InputEvent) -> void:
 		_cam_idle = 0.0
 
 
+func _exit_tree() -> void:
+	Models.clear_cache()
+	# Stop every sound now, so looping sounds don't outlive the scene.
+	for p in find_children("*", "AudioStreamPlayer", true, false) + find_children("*", "AudioStreamPlayer3D", true, false):
+		p.stop()
+
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		_save_game()           # closing the window: save first
 	elif what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		_auto_pause()          # alt-tab, Steam overlay, Steam Deck suspend
+
+
+## F12: save what's on screen to the Screenshots folder (for your store page).
+func _take_screenshot() -> void:
+	var dir := "user://screenshots"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var file := "%s/sand_rover_%s.png" % [dir, Time.get_datetime_string_from_system().replace(":", "-")]
+	get_viewport().get_texture().get_image().save_png(file)
+	_show_message("Screenshot saved: " + ProjectSettings.globalize_path(file))
 
 
 func _auto_pause() -> void:
@@ -3649,3 +3668,170 @@ func _run_drifttest() -> void:
 	r["final_message"] = message.text.left(60)
 	print("DRIFTTEST ", JSON.stringify(r, "  "))
 	get_tree().quit()
+
+
+# ---------------------------------------------------------------------------
+# Release test: controller, menus, settings, achievements.
+# Run with  godot --headless --path . -- --controllertest
+# ---------------------------------------------------------------------------
+
+func _pad_axis(axis: int, value: float) -> void:
+	var e := InputEventJoypadMotion.new()
+	e.axis = axis
+	e.axis_value = value
+	Input.parse_input_event(e)
+
+
+func _pad_button(button: int, pressed: bool) -> void:
+	var e := InputEventJoypadButton.new()
+	e.button_index = button
+	e.pressed = pressed
+	Input.parse_input_event(e)
+
+
+## Run the driving controls for a while (tests skip the normal input path).
+func _ct_drive(seconds: float) -> void:
+	var t := 0.0
+	while t < seconds:
+		await get_tree().physics_frame
+		t += 1.0 / Engine.physics_ticks_per_second
+		_drive_input(1.0 / Engine.physics_ticks_per_second)
+
+
+func _run_controllertest() -> void:
+	terrain.finish_all_tiles()
+	await _wait(0.3)
+	_m4_clear_beetles()
+	var r := {}
+	money = 500
+	_m5_put_truck(BASE_POS + Vector3(0, 0, -8), PI)
+	await _wait(0.5)
+	# 1. Analog driving: right trigger, left stick, A.
+	_pad_axis(JOY_AXIS_TRIGGER_RIGHT, 1.0)
+	_pad_axis(JOY_AXIS_LEFT_X, -1.0)
+	await _ct_drive(0.2)
+	r["using_pad_after_input"] = GameInput.using_pad
+	r["RT_throttle"] = snappedf(car.throttle_input, 0.01)
+	r["stick_left_steer"] = snappedf(car.steer_input, 0.01)
+	_pad_axis(JOY_AXIS_TRIGGER_RIGHT, 0.5)
+	await _ct_drive(0.1)
+	r["half_trigger_throttle"] = snappedf(car.throttle_input, 0.01)
+	_pad_axis(JOY_AXIS_TRIGGER_RIGHT, 0.0)
+	_pad_axis(JOY_AXIS_LEFT_X, 0.0)
+	_pad_button(JOY_BUTTON_A, true)
+	await _ct_drive(0.1)
+	r["A_brake"] = car.brake_input
+	_pad_button(JOY_BUTTON_A, false)
+	await _ct_drive(0.1)
+	# 2. Hold Y to flip: a short tap does nothing, a 0.5 s hold resets.
+	car.global_transform = Transform3D(Basis(Vector3.BACK, PI * 0.9), car.global_position + Vector3(0, 0.5, 0))
+	await _wait(0.8)
+	_pad_button(JOY_BUTTON_Y, true)
+	await _ct_drive(0.2)
+	_pad_button(JOY_BUTTON_Y, false)
+	await _ct_drive(0.1)
+	r["Y_tap_flipped"] = car.global_basis.y.y > 0.5
+	_pad_button(JOY_BUTTON_Y, true)
+	await _ct_drive(0.7)
+	_pad_button(JOY_BUTTON_Y, false)
+	await _ct_drive(0.3)
+	r["Y_hold_flipped"] = car.global_basis.y.y > 0.5
+	# 3. Prompts follow the device.
+	r["prompt_brake_pad"] = GameInput.prompt("brake")
+	var key := InputEventKey.new()
+	key.physical_keycode = KEY_SPACE
+	key.pressed = true
+	Input.parse_input_event(key)
+	key = key.duplicate()
+	key.pressed = false
+	Input.parse_input_event(key)
+	await get_tree().process_frame     # (queued input arrives a frame later)
+	await get_tree().process_frame
+	r["prompt_brake_keyboard"] = GameInput.prompt("brake")
+	r["start_is_pause"] = InputMap.event_is_action(_ev_button(JOY_BUTTON_START), "pause")
+	# 4. The workshop on a pad.
+	_m5_put_truck(BASE_POS, PI)
+	await _wait(0.6)
+	_pad_axis(JOY_AXIS_LEFT_X, 0.0)
+	_pad_button(JOY_BUTTON_B, false)
+	GameInput.using_pad = true
+	_open_workshop()
+	await _wait(0.3)
+	var before := workshop.selected
+	_pad_button(JOY_BUTTON_RIGHT_SHOULDER, true)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_pad_button(JOY_BUTTON_RIGHT_SHOULDER, false)
+	await get_tree().process_frame
+	r["RB_changed_part"] = before + " -> " + workshop.selected
+	workshop.selected = "ballast"
+	workshop._cursor = "L1"
+	_pad_button(JOY_BUTTON_A, true)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_pad_button(JOY_BUTTON_A, false)
+	await _wait(0.2)
+	r["A_placed"] = build.get("L1", "(nothing)")
+	_pad_button(JOY_BUTTON_DPAD_RIGHT, true)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_pad_button(JOY_BUTTON_DPAD_RIGHT, false)
+	await get_tree().process_frame
+	r["dpad_moved_cursor"] = workshop._cursor != "L1"
+	workshop._cursor = "L1"
+	_pad_button(JOY_BUTTON_X, true)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_pad_button(JOY_BUTTON_X, false)
+	await _wait(0.2)
+	r["X_removed"] = not build.has("L1")
+	var bev := _ev_button(JOY_BUTTON_B)
+	bev.pressed = true
+	Input.parse_input_event(bev)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	bev = bev.duplicate()
+	bev.pressed = false
+	Input.parse_input_event(bev)
+	await get_tree().process_frame
+	r["B_left_workshop"] = not workshop.active
+	# 5. Menus put the focus on a button (so the pad works at once).
+	_open_menu()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var f := get_viewport().gui_get_focus_owner()
+	r["base_menu_focus"] = f.get_class() if f else "(none)"
+	_close_menu()
+	var tm := TitleMenu.new()
+	tm.has_save = true
+	add_child(tm)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	f = get_viewport().gui_get_focus_owner()
+	r["title_focus"] = (f as Button).text if f is Button else "(none)"
+	tm.queue_free()
+	# 6. Settings survive a reload.
+	var old: float = Settings.get_value("rumble")
+	Settings.set_value("rumble", 0.25)
+	Settings.load_settings()
+	r["settings_saved_and_loaded"] = is_equal_approx(Settings.get_value("rumble"), 0.25)
+	Settings.set_value("rumble", old)
+	# 7. Achievements: unlock, remembered after a reload (in a test file).
+	Achievements.path = "user://test_achievements.json"
+	Achievements.enabled = true
+	Achievements.reload()
+	Achievements.unlock("ACH_FAST_TRAVEL")
+	Achievements.add("pristine", 10, 10, "ACH_PRISTINE_10")
+	Achievements.reload()
+	r["achievements_remembered"] = Achievements.is_unlocked("ACH_FAST_TRAVEL") and Achievements.is_unlocked("ACH_PRISTINE_10")
+	r["steam_running"] = SteamService.running
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Achievements.path))
+	Achievements.enabled = false
+	print("CONTROLLERTEST ", JSON.stringify(r, "  "))
+	get_tree().quit()
+
+
+func _ev_button(button: int) -> InputEventJoypadButton:
+	var e := InputEventJoypadButton.new()
+	e.button_index = button
+	return e

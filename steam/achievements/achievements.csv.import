@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://bkgiod1h827d8"
+
+[deps]
+
+files=["res://steam/achievements/achievements.Display Name.translation", "res://steam/achievements/achievements.Description.translation", "res://steam/achievements/achievements.Hidden.translation", "res://steam/achievements/achievements.Icon (achieved).translation", "res://steam/achievements/achievements.Icon (not achieved).translation"]
+
+source_file="res://steam/achievements/achievements.csv"
+dest_files=["res://steam/achievements/achievements.Display Name.translation", "res://steam/achievements/achievements.Description.translation", "res://steam/achievements/achievements.Hidden.translation", "res://steam/achievements/achievements.Icon (achieved).translation", "res://steam/achievements/achievements.Icon (not achieved).translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

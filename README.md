@@ -17,26 +17,30 @@ come home, upgrade, repeat.
 2. Open Godot, click **Import**, select this folder's `project.godot`.
 3. Press **F5** (or the play button at the top right).
 
-| Key | Action |
-|---|---|
-| W / S (or arrows) | Drive forward / reverse |
-| A / D | Steer |
-| Space | Brake |
-| R | Flip the truck upright |
-| E | Load a dropped crate back on (park next to it first) |
-| C | Ask the crew for a replacement cargo ($10) |
-| B | Base menu: contracts and garage (only at base) |
-| N | Workshop: build onto your truck (only at base) |
-| F | Winch: fire the sand anchor / let go (if you built one) |
-| P | Fit a spare wheel over a flat tyre (if you built one) |
-| F1 | Controls (also on the title screen) |
-| M | Map |
-| Enter | Start (title screen) |
-| H | Rescue: the crew tows you home ($25) |
-| F3 | Show/hide performance stats |
-| G | Graphics: high (all effects) / low |
-| T | Tilt-shift blur on/off (the "miniature world" look) |
-| V | Toggle V-Sync (off = see your real maximum FPS) |
+| Action | Keyboard | Controller (Xbox names) |
+|---|---|---|
+| Drive / reverse | W / S (or arrows) | RT / LT (analog) |
+| Steer | A / D | Left stick |
+| Brake | Space | A |
+| Flip the truck upright | R | hold Y |
+| Load dropped cargo back on | E | X |
+| Replacement cargo ($10) | C | D-pad Up |
+| Rescue tow ($25) | H | hold LB |
+| Winch (if built) | F | RB |
+| Fit a spare wheel (if built) | P | D-pad Right |
+| Base menu (at a base) | B | B |
+| Workshop (at a base) | N | D-pad Down |
+| Map | M | View |
+| Controls / help | F1 | D-pad Left |
+| Look around | hold right mouse button | Right stick (R3 = back behind the truck) |
+| Pause / Options | Esc | Menu |
+| Screenshot | F12 | (Steam's screenshot key) |
+| Graphics quality / tilt-shift / V-Sync | G / T / V | in Options |
+| Performance stats (development builds) | F3 | |
+
+PlayStation and Switch pads work too (same button positions). On a
+controller, flip and rescue need a short hold so you can't press them by
+accident; the HUD shows a little progress bar.
 
 **The loop:**
 
@@ -292,6 +296,11 @@ your crate. They leave you alone near base.
 | `textures/sand/*.png` | **Your hand-painted sand textures** | See "Painting the sand textures" |
 | `tools/sand_preview.tscn` | Live preview of the sand while you paint | `@tool` scripts that run in the editor |
 | `tools/beauty_shots.tscn` | Six fixed camera shots saved as PNGs (F6) | Comparing art changes |
+| `scripts/game_input.gd` | **All controls**, keyboard + controller, prompts, rumble | InputMap, autoloads |
+| `scripts/settings.gd`, `options_menu.gd` | Options: saved, applied, and the menu | ConfigFile, audio buses |
+| `scripts/title_menu.gd`, `pause_menu.gd`, `credits_page.gd` | Title, pause and credits screens | Menus that work with a pad (focus) |
+| `scripts/achievements.gd`, `steam_service.gd` | Achievements, and the only code that talks to Steam | Optional plugins |
+| `steam/` | Everything for the Steam release | |
 | `tools/_bench.gd`, `tools/_bench_world.gd` | Timings for the sand and for making the world | Measure before you optimise |
 
 Start with `main.gd`, then `rc_car.gd`, then `sand_terrain.gd`. The comments
@@ -440,6 +449,18 @@ godot --headless --path . -- --scorpiontest
 ```bash
 godot --headless --path . -- --outposttest
 ```
+
+Release (controller, menus, settings, achievements):
+
+```bash
+godot --headless --path . -- --controllertest
+```
+
+It feeds in fake controller input: the triggers and stick drive (half a
+trigger = half throttle), a tap of Y doesn't flip but a hold does, the
+workshop works with the pad (RB, A, D-pad, X, B), prompts switch between
+"A" and "Space", menus put the focus on a button, and settings and
+achievements survive a reload.
 
 Milestone 7:
 
@@ -809,6 +830,40 @@ Decided with an art-direction review, and applied to every model:
 **Beauty shots:** open `tools/beauty_shots.tscn` and press F6. Six fixed
 cameras (base, truck, Salt Flats, Glass Desert, the Drift, the hull) save
 PNGs to `user://beauty_shots`. Take a set before and after any art change.
+
+## Controllers, menus and options
+
+- **Every screen works with a controller**, including the workshop: the
+  D-pad / left stick jumps a cursor between sockets (the camera swings round
+  to show it), LB / RB choose the part, A bolts it on, X removes, Y opens
+  save / load, LT / RT zoom, B is done. Menus open with the first button
+  selected (an orange outline shows where you are); LB / RB switch between
+  contracts and the garage at a base.
+- **Prompts follow your hands:** touch the keyboard and the HUD says
+  "Space"; touch the pad and it says "A" (`scripts/game_input.gd`).
+- **Rumble** on rams, hard landings, scorpion clamps, flips, flat tyres, and
+  softly when cargo falls off or a delivery lands.
+- **Options** (title screen or pause menu): display mode, resolution scale
+  (FSR upscaling), V-Sync, FPS cap, graphics quality (Low / Medium / High),
+  tilt-shift, master / music / effects volume, camera sensitivity and invert,
+  camera shake, rumble strength. Saved in `settings.cfg`.
+- **The game pauses itself** when the window loses focus (alt-tab, the Steam
+  overlay, Steam Deck suspend) or a controller disconnects, and saves when
+  you pause or quit.
+- **Achievements:** 15, listed in `scripts/achievements.gd` (they work
+  without Steam too, remembered in `achievements.json`).
+- **Where saves live:** `%APPDATA%\SandRover` on Windows,
+  `~/.local/share/SandRover` on Linux. Saving writes a temp file first and
+  swaps it in, so a crash can't leave you with a broken save.
+
+## Releasing on Steam
+
+Everything that can be done without your Steamworks account is done:
+export presets for Windows and Linux (Project > Export), store page text,
+achievement list and icons, placeholder store images at every size, and the
+SteamPipe upload scripts, all in `steam/`. **Read `steam/STEAM_TODO.md`**:
+it's the step-by-step list for the rest (account, GodotSteam plugin,
+achievements, Cloud, uploading, Steam Deck review).
 
 ## Sounds
 

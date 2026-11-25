@@ -38,6 +38,13 @@ static func mesh(model_name: String) -> Mesh:
 
 
 ## The one material every model shares (one shader = cheap to draw).
+## Empty the shared materials (on exit, while the renderer still exists:
+## see SandTerrain._exit_tree for why).
+static func clear_cache() -> void:
+	_palette_mat = null
+	_glass_mat = null
+
+
 static func palette_material() -> ShaderMaterial:
 	if _palette_mat == null:
 		_palette_mat = ShaderMaterial.new()

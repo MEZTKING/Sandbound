@@ -107,7 +107,10 @@ func _ready() -> void:
 		body_paint.roughness = 0.4
 
 	var col := CollisionShape3D.new()
-	var mi := MeshInstance3D.new()
+	# (There used to be a plain box/cylinder MeshInstance here too. Since the
+	# Blender models arrived it was never shown, or freed: one leaked node per
+	# cargo, and a crash on exit now and then. Leak hunting with
+	# `godot --verbose` found it: it lists every object still alive at exit.)
 	var band := MeshInstance3D.new()
 	if type_def["shape"] == "ball":
 		var sphere := SphereShape3D.new()
@@ -123,11 +126,6 @@ func _ready() -> void:
 		cyl_shape.radius = size.x * 0.5
 		cyl_shape.height = size.y
 		col.shape = cyl_shape
-		var cm := CylinderMesh.new()
-		cm.top_radius = size.x * 0.5
-		cm.bottom_radius = size.x * 0.5
-		cm.height = size.y
-		mi.mesh = cm
 		var bm := CylinderMesh.new()
 		bm.top_radius = size.x * 0.5 + 0.005
 		bm.bottom_radius = size.x * 0.5 + 0.005
@@ -137,9 +135,6 @@ func _ready() -> void:
 		var box := BoxShape3D.new()
 		box.size = size
 		col.shape = box
-		var cube := BoxMesh.new()
-		cube.size = size
-		mi.mesh = cube
 		var bb := BoxMesh.new()
 		bb.size = Vector3(size.x + 0.02, size.y * 0.08, size.z + 0.02)
 		band.mesh = bb

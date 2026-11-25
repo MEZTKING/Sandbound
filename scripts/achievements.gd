@@ -8,7 +8,7 @@ extends Node
 
 signal unlocked(id: String, title: String)
 
-const PATH := "user://achievements.json"
+var path := "user://achievements.json"   ## (tests point this somewhere else)
 
 ## id -> [title, description]
 const LIST := {
@@ -62,10 +62,17 @@ func add(counter: String, amount: int, target: int, id: String) -> void:
 		unlock(id)
 
 
+## Forget everything and read `path` again (tests).
+func reload() -> void:
+	done.clear()
+	counters.clear()
+	_load()
+
+
 func _load() -> void:
-	if not FileAccess.file_exists(PATH):
+	if not FileAccess.file_exists(path):
 		return
-	var d = JSON.parse_string(FileAccess.get_file_as_string(PATH))
+	var d = JSON.parse_string(FileAccess.get_file_as_string(path))
 	if typeof(d) == TYPE_DICTIONARY:
 		for id in d.get("done", []):
 			done[str(id)] = true
@@ -73,4 +80,4 @@ func _load() -> void:
 
 
 func _save() -> void:
-	SaveIO.write_json(PATH, {"done": done.keys(), "counters": counters})
+	SaveIO.write_json(path, {"done": done.keys(), "counters": counters})

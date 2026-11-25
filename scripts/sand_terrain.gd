@@ -130,6 +130,10 @@ func _finish_tile(c: Vector2i, wait: bool) -> bool:
 ## finish and free the tiles that never made it into the scene. (Without this
 ## the game hung on exit if you quit in the first few seconds.)
 func _exit_tree() -> void:
+	# Shared meshes live in a static cache. Statics are cleared AFTER Godot
+	# has shut its renderer down, and freeing a mesh then crashed the game on
+	# exit now and then. Empty the cache while the renderer still exists.
+	SandTile._grids.clear()
 	for c in _tasks:
 		tiles[c].cancelled = true
 	for c in _tasks:
