@@ -5,6 +5,13 @@ extends RefCounted
 ## D-pad, and every menu can put the focus on its first button.
 
 const ACCENT := Color(1.0, 0.75, 0.35)
+## Fonts (both SIL Open Font License, see fonts/OFL_*.txt). Chosen in an
+## art-direction review: Rubik Mono One for titles (chunky, like the decals
+## on a toy box), Rubik for everything else (the same shapes, readable small).
+const TITLE_FONT := preload("res://fonts/RubikMonoOne-Regular.ttf")
+const BOLD_FONT := preload("res://fonts/ui_bold.tres")
+## Text outlines: a warm dark brown sits better on sand than pure black.
+const OUTLINE := Color(0.165, 0.102, 0.063)
 
 
 static func panel(min_size: Vector2) -> PanelContainer:
@@ -23,6 +30,11 @@ static func label(text: String, size: int, color := Color.WHITE) -> Label:
 	l.text = text
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", color)
+	if size >= 28:
+		# Headings: the title font (it's made for big sizes only).
+		l.add_theme_font_override("font", TITLE_FONT)
+		l.add_theme_color_override("font_outline_color", OUTLINE)
+		l.add_theme_constant_override("outline_size", maxi(4, size / 10))
 	return l
 
 

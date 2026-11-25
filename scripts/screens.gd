@@ -82,6 +82,8 @@ static func _label(text: String, size: int, color: Color) -> Label:
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", color)
-	l.add_theme_color_override("font_outline_color", Color.BLACK)
-	l.add_theme_constant_override("outline_size", 8)
+	l.add_theme_color_override("font_outline_color", UIKit.OUTLINE)
+	l.add_theme_constant_override("outline_size", 6)
+	if size >= 28:
+		l.add_theme_font_override("font", UIKit.TITLE_FONT)
 	return l

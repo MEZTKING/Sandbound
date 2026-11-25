@@ -22,8 +22,8 @@ func _ready() -> void:
 	center.add_child(box)
 	var title := UIKit.label("SAND ROVER", 84, Color(1, 0.85, 0.55))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_color_override("font_outline_color", Color.BLACK)
-	title.add_theme_constant_override("outline_size", 10)
+	title.add_theme_color_override("font_outline_color", UIKit.OUTLINE)
+	title.add_theme_constant_override("outline_size", 12)
 	box.add_child(title)
 	var tag := UIKit.label("a tiny courier in a very big desert", 26, Color(1, 1, 1, 0.85))
 	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

@@ -13,6 +13,8 @@ const CREDITS := """SAND ROVER
 Design, code and art: (your name here)
 Made with the Godot Engine (godotengine.org)
 3D models built with Blender (blender.org)
+Fonts: Rubik and Rubik Mono One, copyright 2015 The Rubik Project Authors
+(SIL Open Font License 1.1, licence text below)
 
 Thanks for playing!"""
 
@@ -31,7 +33,8 @@ func _ready() -> void:
 	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	text.custom_minimum_size.x = 860
 	text.add_theme_font_size_override("font_size", 16)
-	text.text = CREDITS + "\n\n" + licence_text()
+	text.text = CREDITS + "\n\n" + licence_text() + "\n\nFONT LICENCE (Rubik, Rubik Mono One)\n\n" \
+			+ FileAccess.get_file_as_string("res://fonts/OFL_Rubik.txt")
 	_scroll.add_child(text)
 	add_child(UIKit.label("D-pad / arrows: scroll", 14, Color(1, 1, 1, 0.6)))
 	add_child(UIKit.button("Back", func(): back.emit(), 18))

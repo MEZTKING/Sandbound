@@ -827,6 +827,12 @@ Decided with an art-direction review, and applied to every model:
   colour noise on the dark and lilac sand, and sand rivers with moving
   streaks and a pale foam edge.
 
+**Fonts:** Rubik Mono One for titles and big headings, Rubik (medium for
+menus, bold for the HUD, with "tabular" digits so numbers don't jiggle) for
+everything else. Both are free (SIL Open Font License, in `fonts/`), chosen
+to match: the same letter shapes, one chunky like toy-box decals, one
+readable at small sizes. Text outlines are a warm dark brown, not black.
+
 **Beauty shots:** open `tools/beauty_shots.tscn` and press F6. Six fixed
 cameras (base, truck, Salt Flats, Glass Desert, the Drift, the hull) save
 PNGs to `user://beauty_shots`. Take a set before and after any art change.

@@ -20,7 +20,7 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = sys.argv[1] if len(sys.argv) > 1 else "."
 OUT = os.path.join(HERE, "store")
-FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"   # any bold .ttf works
+FONT = os.path.join(HERE, "..", "fonts", "RubikMonoOne-Regular.ttf")   # the game's title font
 TITLE = "SAND ROVER"
 TAGLINE = "a tiny courier in a very big desert"
 
@@ -52,7 +52,7 @@ def title(img, size, y_frac, sub=None):
         d.text((x + dx, y + dy), TITLE, font=f, fill=(20, 12, 6))
     d.text((x, y), TITLE, font=f, fill=(255, 214, 140))
     if sub:
-        f2 = ImageFont.truetype(FONT, int(size * 0.28))
+        f2 = ImageFont.truetype(os.path.join(HERE, "..", "fonts", "Rubik.ttf"), int(size * 0.3))
         d.text(((W - d.textlength(sub, font=f2)) / 2, y + size * 1.15), sub, font=f2, fill=(255, 255, 255))
     return img
 

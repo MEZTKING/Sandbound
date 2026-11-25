@@ -2129,19 +2129,29 @@ func _build_hud() -> void:
 	add_child(layer)
 	hud = Label.new()
 	hud.position = Vector2(16, 12)
+	hud.add_theme_font_override("font", UIKit.BOLD_FONT)
 	hud.add_theme_font_size_override("font_size", 18)
-	hud.add_theme_color_override("font_outline_color", Color.BLACK)
-	hud.add_theme_constant_override("outline_size", 6)
+	hud.add_theme_color_override("font_outline_color", UIKit.OUTLINE)
+	hud.add_theme_constant_override("outline_size", 5)
 	layer.add_child(hud)
 	message = Label.new()
+	# Centred, 30% down the screen: clear of the HUD lines at the top-left
+	# and above the truck, at any screen size. Long messages wrap.
 	message.anchor_left = 0.5
 	message.anchor_right = 0.5
-	message.position = Vector2(-300, 80)
-	message.size = Vector2(600, 40)
+	message.anchor_top = 0.3
+	message.anchor_bottom = 0.3
+	message.offset_left = -440
+	message.offset_right = 440
+	message.offset_top = -40
+	message.offset_bottom = 40
+	message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	message.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	message.add_theme_font_override("font", UIKit.BOLD_FONT)
 	message.add_theme_font_size_override("font_size", 26)
-	message.add_theme_color_override("font_outline_color", Color.BLACK)
-	message.add_theme_constant_override("outline_size", 8)
+	message.add_theme_color_override("font_outline_color", UIKit.OUTLINE)
+	message.add_theme_constant_override("outline_size", 7)
 	layer.add_child(message)
 
 

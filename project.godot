@@ -47,3 +47,7 @@ common/physics_interpolation=true
 ; Godot's own physics engine. (Jolt is faster for most things, but it rebuilds
 ; the whole sand collision shape on every change, which is 5x slower for us.)
 3d/physics_engine="GodotPhysics3D"
+
+[gui]
+; Every menu and label uses Rubik (medium weight, digits that don't jiggle).
+theme/custom_font="res://fonts/ui.tres"
